@@ -71,7 +71,7 @@ int main() {
 
     //mesh initialisation
     SeaMesh* sea = new SeaMesh(500.0f, 1000);
-    SkyMesh* sky = new SkyMesh(100);
+    SkyMesh* sky = new SkyMesh(20); // like an HDRI
 
     // Sea shaders
     GLint seaShader = make_shader(
