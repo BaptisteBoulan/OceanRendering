@@ -2,6 +2,45 @@
 #include "sky.h"
 #include "sea.h"
 #include "shader_loader.h"
+#include "camera.h"
+
+// Window setup
+int windowWidth = 640;
+int windowHeight = 480;
+
+//Camera setup
+Camera camera(glm::vec3(0.0f, 15.0f, 10.0f));
+float lastX = (float)windowWidth/2, lastY = (float)windowHeight/2; // Center of the window
+bool firstMouse = true;
+
+float fovy = 1.0f;
+glm::mat4 projection = glm::perspective(fovy, (float)windowWidth/windowHeight, 0.1f, 300.0f);
+glm::vec3 up = {0.0f, 1.0f, 0.0f};
+
+void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
+    if (firstMouse) {
+        lastX = (float)xpos;
+        lastY = (float)ypos;
+        firstMouse = false;
+    }
+
+    float xOffset = (float)xpos - lastX;
+    float yOffset = (float)ypos - lastY;
+    lastX = (float)xpos;
+    lastY = (float)ypos;
+
+    camera.processMouse(xOffset, yOffset);
+}
+
+// For debugging
+void printMatrix(const glm::mat4& matrix) {
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            std::cout << matrix[j][i] << "  ";
+        }
+        std::cout << std::endl;
+    }
+}
 
 
 int main() {
@@ -17,8 +56,6 @@ int main() {
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 
-    int windowWidth = 1440;
-    int windowHeight = 720;
     window = glfwCreateWindow(windowWidth, windowHeight, "My Renderer", NULL, NULL);
 
     glfwMakeContextCurrent(window);
@@ -33,14 +70,8 @@ int main() {
     
 
     //mesh initialisation
-    SeaMesh* sea = new SeaMesh(100.0f, 100);
+    SeaMesh* sea = new SeaMesh(500.0f, 1000);
     SkyMesh* sky = new SkyMesh(100);
-
-    //Camera set up
-    float camera_speed = 0.015f;
-    float fovy = 1.0f;
-    glm::mat4 projection = glm::perspective(fovy, (float)windowWidth/windowHeight, 0.1f, 50.0f);
-    glm::vec3 up = {0.0f, 1.0f, 0.0f};
 
     // Sea shaders
     GLint seaShader = make_shader(
@@ -81,16 +112,21 @@ int main() {
     glUniform1f(fovyLoc, fovy);
 
 
-    while (!glfwWindowShouldClose(window)) {
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+    while (!glfwWindowShouldClose(window) && !glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwPollEvents();
 
         float time = (float)glfwGetTime();
 
         //camera
-        glm::vec3 cameraPos = {1.0f * cos(camera_speed * time), 3.0f, 1.0f * sin(camera_speed * time)};
-        glm::vec3 cameraTarget = {-100.0f * cos(camera_speed * time), 0.0f, -100.0f * sin(camera_speed * time)};
-        
-        glm::mat4 view = glm::lookAt(cameraPos, cameraTarget, up);
+        static float lastFrame = time;
+        float deltaTime = time - lastFrame;
+        lastFrame = time;
+
+        camera.processKeyboard(window, deltaTime);
+        glm::mat4 view = camera.getViewMatrix();
 
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -108,7 +144,7 @@ int main() {
         //sea shader uniform variables
         glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
         glUniform1f(iTimeLoc, time);
-        glUniform3f(cameraPosLoc, cameraPos.x, cameraPos.y, cameraPos.z);
+        glUniform3f(cameraPosLoc, camera.position.x, camera.position.y, camera.position.z);
 
 		sea->draw();
 
@@ -117,6 +153,6 @@ int main() {
 
     glfwTerminate();
 	delete sea;
-    delete sky;
+    // delete sky;
 	return 0;
 }

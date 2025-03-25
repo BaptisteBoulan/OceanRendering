@@ -21,25 +21,32 @@ uniform mat4 view;
 
 
 
+struct Material {
+    vec3 baseColor;
+    float metallic;
+    float specular;
+    float diffuse;
+};
+
+Material water = Material(vec3(0.1, 0.3, 0.5), 0.8, 1.2, 0.3);
+
 void main() {
-    vec3 waterColor = vec3(0.1, 0.3, 0.5);
-
-    if (sunIntensity >= 0.)
-        lightColor = vec3(1.0, min(1.0, 0.6 + 0.4 * sunIntensity), min(1.0, sunIntensity));
-    else
-        lightColor = vec3(1.,.6,0.) * exp(sunIntensity * 12.) ;
-
-
-    // Sunlight reflection
+    initLights();
+    
     vec3 viewDir = normalize(cameraPos - fragPos);
-    vec3 reflectDir = reflect(lightDir, normal);
-    float mettalic = 0.8 * pow(max(dot(viewDir, reflectDir), 0.0), 16.0); // mettalic highlight
-    float spec = 0.9 * pow(max(dot(viewDir, reflectDir), 0.0), 32.0); // Specular highlight
-    float diff = 0.7 * max(dot(normal, lightDir), 0.0); // Diffuse light
+    vec3 finalColor = 0.1 * water.baseColor;
     
-    vec3 skyLight = 0.1 * skyColor(reflect(viewDir,normal));
+    for (int i = 0; i < NUM_LIGHTS; i++) {
+        vec3 reflectDir = reflect(lights[i].direction, normal);
+        float metallicEffect = water.metallic * pow(max(dot(viewDir, reflectDir), 0.0), 12.0);
+        float specularEffect = water.specular * pow(max(dot(viewDir, reflectDir), 0.0), 256.0);
+        float diffuseEffect = water.diffuse * max(dot(normal, lights[i].direction), 0.0);
+        
+        finalColor += lights[i].color * ((metallicEffect + diffuseEffect) * water.baseColor + specularEffect);
+    }
     
-    vec3 finalColor = 0.1 * waterColor + lightColor * ((mettalic + diff) * waterColor + spec) + skyLight;// Mix light with water
+    vec3 skyLight = 0.1 * skyColor(reflect(viewDir, normal));
+    finalColor += skyLight;
     
-    screenColor = vec4(finalColor, 1.0f);
+    screenColor = vec4(finalColor, 1.0);
 }

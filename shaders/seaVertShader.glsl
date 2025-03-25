@@ -14,66 +14,63 @@ uniform vec3 cameraPos;
 
 #define PI 3.14159265359
 
-// --- SEA ---
+// --- CONSTANTES PHYSIQUES ---
+const float g = 9.81; // Gravité terrestre
+const float windSpeed = 10.0; // Vitesse du vent en m/s
 
-// Gravity constant (approximate)
-const float g = 9.81;
-
-// Generate a single trochoidal wave based on wavelength and amplitude
-vec2 generateWave(vec2 p, float t, float wavelength, float amplitude) {
-    float randomParam = fract(sin(dot(vec2(amplitude, 0.1545), vec2(1.123, 2.345))) * 43758.5453123);
-    float u = p.y * randomParam + p.x * (1. - randomParam);
-    float k = 2.0 * PI / wavelength;
-    float omega = sqrt(9.81 * k);
-    float phase = k * u - omega * t;
-    return vec2(amplitude * sin(phase), amplitude * cos(phase));
-}
-
-// Compute sea surface height with LOD-based transition from geometry to shading
-float seaLevel(vec2 p, float t, float viewDistance) {
-    float h = 0.0;
-    int N = 8; // Number of wave components
-    float wavelength = 15.0;
-    float amplitude = 0.5;
-    float minLod = 2.0; // Min wave detail level before switching to normal-based shading
-    float maxLod = 5.0; // Max wave detail before BRDF shading
-
-    for (int i = 0; i < N; i++) {
-        if (viewDistance > maxLod * wavelength + 10.) break; // Stop processing waves at large distances
-        
-        vec2 displacement = generateWave(p, t, wavelength, amplitude);
-
-        if (viewDistance < minLod * wavelength + 10.) {
-            // Use full displacement for near waves
-            p.x += displacement.x;
-            p.y += displacement.x;
-            h += displacement.y;
-        } else {
-            // Store only normal perturbation for distant waves
-            h += displacement.y * smoothstep(minLod * wavelength, maxLod * wavelength, viewDistance);
-        }
-
-        wavelength /= 1.8;
-        amplitude /= 2.5;
-    }
+// --- SPECTRE PIERSON-MOSKOWITZ ---
+// Modélise la distribution d'énergie des vagues en fonction de la fréquence
+float PM_Spectrum(float k) {
+    float alpha = 0.0081; // Facteur empirique 
+    float k_peak = g / (windSpeed * windSpeed); // Nombre d'onde correspondant à la fréquence de pic
+    float omega_peak = sqrt(g * k_peak);
     
-    return h;
+    return alpha * g * g / pow(k, 4.0) * exp(-1.25 * pow(k_peak / k, 2.0));
 }
 
-// Computes the normal of the wave surface using finite differences
-vec3 calcNormal(vec3 p, float t, float viewDistance) {
-    float eps = 0.01;
-    vec3 dx = vec3(eps, seaLevel(p.xz + vec2(eps, 0), t, viewDistance) - seaLevel(p.xz, t, viewDistance), 0);
-    vec3 dz = vec3(0, seaLevel(p.xz + vec2(0, eps), t, viewDistance) - seaLevel(p.xz, t, viewDistance), eps);
+// --- GÉNÉRATION DES VAGUES ---
+vec3 computeWaveDisplacement(vec2 p, float t) {
+    vec3 displacement = vec3(0.0);
+    int N = 120 ; // Nombre de composantes de vagues
+    float lambda_min = 0.1;
+    float lambda_max = 50.0;
+    
+    for (int i = 0; i < N; i++) {
+        float randomTheta = fract(sin(float(i) * 57.23) * 43758.5453) * 0.5 * PI; // Fonction pseudo-aléatoire pour donner un angle proche de 0, afin de simulier des vagues presque dans le même sens
+        vec2 waveDir = vec2(cos(randomTheta), sin(randomTheta));
+
+        float wavelength = lambda_min + (lambda_max - lambda_min) * pow(float(i) / float(N), 4.0);
+        float k = 2.0 * PI / wavelength;
+        float omega = sqrt(g * k);
+        float amplitude = sqrt(PM_Spectrum(k)) * 1.0; // Ajustement empirique
+        
+        float phase = dot(waveDir, p) * k - omega * t;
+        displacement += vec3(waveDir.x, 1.0, waveDir.y) * (amplitude * sin(phase));
+    }
+
+    return displacement / float(N);
+}
+
+// --- CALCUL DE LA HAUTEUR ---
+float seaLevel(vec2 p, float t) {
+    return computeWaveDisplacement(p, t).y;
+}
+
+// --- CALCUL DE LA NORMALE (Approximation par différences finies) ---
+vec3 calcNormal(vec3 p, float t) {
+    float eps = 0.1;
+    vec3 dx = vec3(eps, seaLevel(p.xz + vec2(eps, 0), t) - seaLevel(p.xz, t), 0);
+    vec3 dz = vec3(0, seaLevel(p.xz + vec2(0, eps), t) - seaLevel(p.xz, t), eps);
     return normalize(cross(dx, dz));
 }
 
 void main() {
-    float viewDistance = length(cameraPos - vertexPos);
-    float h = seaLevel(vertexPos.xz, iTime, viewDistance);
-    vec3 position = vec3(vertexPos.x, h, vertexPos.z);
+    vec3 displacement = computeWaveDisplacement(vertexPos.xz, iTime);
+    vec3 position = vertexPos + displacement;
+    
     fragPos = position;
-    gl_Position = projection * view * model *  vec4(position, 1.0);
-    normal = calcNormal(position, iTime, viewDistance); 
-    fragUV = gl_Position.xy;
+    normal = calcNormal(position, iTime);
+    fragUV = position.xz;
+
+    gl_Position = projection * view * model * vec4(position, 1.0);
 }

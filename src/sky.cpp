@@ -2,28 +2,36 @@
 #include <glad/glad.h>
 #include <vector>
 #include <iostream>
+#include <cmath>
+
+#define PI 3.14159265
 
 SkyMesh::SkyMesh(int resolution) {
-    if (resolution < 1) resolution = 1;
+    if (resolution < 3) resolution = 3; // Minimum resolution for a sphere
 
     std::vector<float> positions;
     std::vector<int> elements_indices;
 
-    // Génération des sommets
+    // Generate vertices for the sphere
     for (int y = 0; y <= resolution; ++y) {
         for (int x = 0; x <= resolution; ++x) {
-            float px = -1.0f + 2.0f * x / resolution;
-            float py = -1.0f + 2.0f * y / resolution;
-            positions.push_back(px);
-            positions.push_back(py);
-            positions.push_back(0.0f);
+            float theta = 2.0f * PI * x / resolution;
+            float phi = PI * y / resolution;
+
+            float xPos = sin(phi) * cos(theta);
+            float yPos = cos(phi);
+            float zPos = sin(phi) * sin(theta);
+
+            positions.push_back(xPos);
+            positions.push_back(yPos);
+            positions.push_back(zPos);
         }
     }
 
-    // Génération des indices des triangles
+    // Generate indices for the sphere
     for (int y = 0; y < resolution; ++y) {
         for (int x = 0; x < resolution; ++x) {
-            int topLeft = y * (resolution + 1) + x;
+            int topLeft = (y * (resolution + 1) + x);
             int topRight = topLeft + 1;
             int bottomLeft = topLeft + (resolution + 1);
             int bottomRight = bottomLeft + 1;

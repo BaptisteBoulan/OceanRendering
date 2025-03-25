@@ -18,6 +18,8 @@ add_executable(my_renderer_batoo
     src/sea.cpp
     src/sky.h
     src/sky.cpp
+    src/camera.h
+    src/camera.cpp
 )
 
 target_include_directories(my_renderer_batoo PRIVATE dependencies)

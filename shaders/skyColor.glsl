@@ -1,10 +1,23 @@
-// Sun Direction
-float dayNightCycle = iTime * 0.2f; // Controls day-night transition, adjust speed with 0.1
-vec3 lightDir = normalize(vec3(cos(dayNightCycle), -sin(dayNightCycle), 0.0f));
+#define NUM_LIGHTS 2
 
-// Sun Color (morning to midday to evening)
-vec3 lightColor;
-float sunIntensity = sin(dayNightCycle); // Smooth day/night transition (using sine)
+struct Light {
+    vec3 direction;
+    vec3 color;
+};
+
+Light lights[NUM_LIGHTS];
+float sunIntensity;
+
+void initLights() {
+    float dayNightCycle = iTime * 0.1f;
+    vec3 sunDir = normalize(vec3(0.0f, -sin(dayNightCycle), cos(dayNightCycle)));
+    vec3 moonDir = normalize(vec3(sin(0.5f * dayNightCycle), - 0.5f, cos(0.5f * dayNightCycle)));
+    sunIntensity = sin(dayNightCycle);
+    vec3 sunColor = sunIntensity >= 0.0 ? vec3(1.0, min(1.0, 0.6 + 0.4 * sunIntensity), min(1.0, sunIntensity)) : vec3(1.0, 0.6, 0.0) * exp(sunIntensity * 12.0);
+    
+    lights[0] = Light(sunDir, sunColor);
+    lights[1] = Light(moonDir, vec3(1.0) * 0.5);
+}
 
 vec3 hash(vec3 p) {
     p = vec3(dot(p, vec3(127.1, 311.7, 74.7)),
@@ -43,34 +56,29 @@ float fbm(vec3 p) {
 }
 
 vec3 skyBaseColor(float sunHeight) {
-    // Color ranges
     vec3 midnightColor = vec3(0., 0., 0.1);
     vec3 sunriseSunsetColor = vec3(0.6, 0.3, 0.0);
     vec3 middayColor = vec3(0.47, 0.71, 1.0);
     
     vec3 interpolatedColor;
-
     if (sunHeight < 0.0) {
-        // When sunHeight is negative (nighttime), interpolate from midnight to sunrise/sunset color
-        float t = smoothstep(-1., 0.0, sunHeight); // Transition from midnightColor to sunriseSunsetColor
+        float t = smoothstep(-1., 0.0, sunHeight);
         interpolatedColor = mix(midnightColor, sunriseSunsetColor, t);
     } else {
-        // When sunHeight is positive (daytime), interpolate from sunrise/sunset color to midday color
-        float t = smoothstep(0.0, 1., sunHeight); // Transition from sunriseSunsetColor to middayColor
+        float t = smoothstep(0.0, 1., sunHeight);
         interpolatedColor = mix(sunriseSunsetColor, middayColor, t);
     }
-
     return interpolatedColor;
 }
 
-
 vec3 skyColor(vec3 p) {
-    float distanceToSun = length(normalize(p) + lightDir);
-    float invertedDistance = pow(1./ max(1., 10. * distanceToSun),2.);
-    vec3 sunColor = vec3(0.6,0.5,0.);
-    
-    float sunHeight = min(2., max(-2., -lightDir.y)); // To have a 0 to 1 value
-    
+    initLights();
+    float distanceToSun = length(normalize(p) + lights[0].direction);
+    float invertedDistanceToSun = pow(1. / max(1., 10. * distanceToSun), 2.);
 
-    return skyBaseColor(sunHeight) + max(0.,fbm(7. * p + vec3(0.2 * iTime, 0., 0.2 * iTime))) + invertedDistance * sunColor;
+    float distanceToMoon = length(normalize(p) + lights[1].direction);
+    float invertedDistanceToMoon = pow(1. / max(1., 25. * distanceToMoon), 2.);
+
+    vec3 sunColor = vec3(0.6, 0.5, 0.0);
+    return skyBaseColor(sunIntensity) + max(0., fbm(7. * p + vec3(0.2 * iTime, 0., 0.2 * iTime))) + invertedDistanceToSun * sunColor + invertedDistanceToMoon * vec3(0.5f);
 }
